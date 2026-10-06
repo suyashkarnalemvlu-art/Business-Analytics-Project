@@ -1,0 +1,781 @@
+# ============================================================
+# ONLINE RETAIL BUSINESS ANALYTICS PROJECT
+# ============================================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+from scipy import stats
+from scipy.stats import f_oneway
+
+import warnings
+warnings.filterwarnings("ignore")
+
+
+# ============================================================
+# 1. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("OnlineRetail.csv", encoding="ISO-8859-1")
+
+print("\n========== DATASET INFORMATION ==========")
+print("Shape:", df.shape)
+print("\nColumns:")
+print(df.columns.tolist())
+
+print("\nFirst 5 Records:")
+print(df.head())
+
+print("\nLast 5 Records:")
+print(df.tail())
+
+
+# ============================================================
+# 2. DATA PREPROCESSING
+# ============================================================
+
+print("\n========== DATA PREPROCESSING ==========")
+
+print("\nMissing Values:")
+print(df.isnull().sum())
+
+print("\nDuplicate Records:", df.duplicated().sum())
+
+# Remove duplicate records
+df = df.drop_duplicates()
+
+# Remove rows with missing CustomerID
+df = df.dropna(subset=["CustomerID"])
+
+# Convert InvoiceDate to datetime
+df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"])
+
+# Remove invalid quantities and prices
+df = df[df["Quantity"] > 0]
+df = df[df["UnitPrice"] > 0]
+
+# Create Revenue column
+df["Revenue"] = df["Quantity"] * df["UnitPrice"]
+
+print("\nCleaned Dataset Shape:", df.shape)
+
+
+# ============================================================
+# 3. BASIC STATISTICS
+# ============================================================
+
+print("\n========== DESCRIPTIVE STATISTICS ==========")
+
+print(df[["Quantity", "UnitPrice", "Revenue"]].describe())
+
+print("\nMean:")
+print(df[["Quantity", "UnitPrice", "Revenue"]].mean())
+
+print("\nMedian:")
+print(df[["Quantity", "UnitPrice", "Revenue"]].median())
+
+print("\nMode:")
+print(df[["Quantity", "UnitPrice", "Revenue"]].mode().iloc[0])
+
+print("\nVariance:")
+print(df[["Quantity", "UnitPrice", "Revenue"]].var())
+
+print("\nStandard Deviation:")
+print(df[["Quantity", "UnitPrice", "Revenue"]].std())
+
+
+# ============================================================
+# 4. EXPLORATORY DATA ANALYSIS
+# ============================================================
+
+# ---------- Bar Chart: Revenue by Country ----------
+
+country_revenue = (
+    df.groupby("Country")["Revenue"]
+    .sum()
+    .sort_values(ascending=False)
+    .head(10)
+)
+
+plt.figure(figsize=(10, 6))
+country_revenue.plot(kind="bar")
+plt.title("Top 10 Countries by Revenue")
+plt.xlabel("Country")
+plt.ylabel("Revenue")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# ---------- Bar Chart: Top Products ----------
+
+product_revenue = (
+    df.groupby("Description")["Revenue"]
+    .sum()
+    .sort_values(ascending=False)
+    .head(10)
+)
+
+plt.figure(figsize=(10, 6))
+product_revenue.plot(kind="bar")
+plt.title("Top 10 Products by Revenue")
+plt.xlabel("Product")
+plt.ylabel("Revenue")
+plt.xticks(rotation=75)
+plt.tight_layout()
+plt.show()
+
+
+# ---------- Histogram: Quantity ----------
+
+plt.figure(figsize=(8, 5))
+plt.hist(df["Quantity"], bins=50)
+plt.title("Distribution of Quantity")
+plt.xlabel("Quantity")
+plt.ylabel("Frequency")
+plt.xlim(0, df["Quantity"].quantile(0.99))
+plt.tight_layout()
+plt.show()
+
+
+# ---------- Histogram: Revenue ----------
+
+plt.figure(figsize=(8, 5))
+plt.hist(df["Revenue"], bins=50)
+plt.title("Distribution of Revenue")
+plt.xlabel("Revenue")
+plt.ylabel("Frequency")
+plt.xlim(0, df["Revenue"].quantile(0.99))
+plt.tight_layout()
+plt.show()
+
+
+# ---------- Box Plot ----------
+
+plt.figure(figsize=(8, 5))
+plt.boxplot(df["Revenue"], vert=False)
+plt.title("Revenue Box Plot")
+plt.xlabel("Revenue")
+plt.tight_layout()
+plt.show()
+
+
+# ---------- Pie Chart ----------
+
+country_orders = df["Country"].value_counts().head(10)
+
+plt.figure(figsize=(8, 8))
+plt.pie(
+    country_orders,
+    labels=country_orders.index,
+    autopct="%1.1f%%"
+)
+plt.title("Top 10 Countries by Number of Transactions")
+plt.show()
+
+
+# ============================================================
+# 5. CORRELATION ANALYSIS
+# ============================================================
+
+print("\n========== CORRELATION ANALYSIS ==========")
+
+numeric_data = df[["Quantity", "UnitPrice", "Revenue"]]
+
+print(numeric_data.corr())
+
+plt.figure(figsize=(7, 5))
+sns.heatmap(
+    numeric_data.corr(),
+    annot=True,
+    cmap="coolwarm"
+)
+plt.title("Correlation Heatmap")
+plt.tight_layout()
+plt.show()
+
+
+# ============================================================
+# 6. LINEAR REGRESSION
+# ============================================================
+
+print("\n========== LINEAR REGRESSION ==========")
+
+# Independent variable
+X = df[["Quantity"]]
+
+# Dependent variable
+y = df["Revenue"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+model = LinearRegression()
+
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+
+print("Regression Coefficient:", model.coef_[0])
+print("Intercept:", model.intercept_)
+print("R² Score:", r2_score(y_test, y_pred))
+print("MAE:", mean_absolute_error(y_test, y_pred))
+print("MSE:", mean_squared_error(y_test, y_pred))
+print("RMSE:", np.sqrt(mean_squared_error(y_test, y_pred)))
+
+print(
+    "\nRegression Equation:"
+    f" Revenue = {model.intercept_:.2f} + "
+    f"({model.coef_[0]:.2f} × Quantity)"
+)
+
+
+# Regression Plot
+
+sample = df.sample(
+    min(5000, len(df)),
+    random_state=42
+)
+
+plt.figure(figsize=(8, 5))
+
+plt.scatter(
+    sample["Quantity"],
+    sample["Revenue"],
+    alpha=0.4
+)
+
+x_line = np.linspace(
+    sample["Quantity"].min(),
+    sample["Quantity"].max(),
+    100
+)
+
+y_line = model.predict(
+    pd.DataFrame({"Quantity": x_line})
+)
+
+plt.plot(x_line, y_line)
+
+plt.title("Quantity vs Revenue - Linear Regression")
+plt.xlabel("Quantity")
+plt.ylabel("Revenue")
+plt.xlim(0, sample["Quantity"].quantile(0.99))
+plt.tight_layout()
+plt.show()
+
+
+# ============================================================
+# 7. PROBABILITY
+# ============================================================
+
+print("\n========== PROBABILITY ==========")
+
+total_transactions = len(df)
+
+high_quantity = len(df[df["Quantity"] > 10])
+
+probability = high_quantity / total_transactions
+
+print(
+    "Probability of Quantity > 10:",
+    probability
+)
+
+
+# ============================================================
+# 8. PROBABILITY DISTRIBUTIONS
+# ============================================================
+
+random_values = np.random.normal(
+    loc=df["Revenue"].mean(),
+    scale=df["Revenue"].std(),
+    size=1000
+)
+
+plt.figure(figsize=(8, 5))
+plt.hist(random_values, bins=30)
+plt.title("Normal Distribution of Revenue")
+plt.xlabel("Revenue")
+plt.ylabel("Frequency")
+plt.show()
+
+
+# ============================================================
+# 9. DECISION MAKING UNDER UNCERTAINTY
+# ============================================================
+
+print("\n========== DECISION MAKING ==========")
+
+# Example business decision
+alternatives = {
+    "High Promotion": [0.6, 0.4],
+    "Low Promotion": [0.6, 0.4]
+}
+
+payoffs = {
+    "High Promotion": [50000, 20000],
+    "Low Promotion": [35000, 25000]
+}
+
+for alternative in alternatives:
+
+    expected_value = sum(
+        p * payoff
+        for p, payoff in zip(
+            alternatives[alternative],
+            payoffs[alternative]
+        )
+    )
+
+    print(
+        alternative,
+        "Expected Value:",
+        expected_value
+    )
+
+
+# ============================================================
+# 10. SAMPLING AND CENTRAL LIMIT THEOREM
+# ============================================================
+
+print("\n========== SAMPLING ==========")
+
+sample_means = []
+
+for i in range(100):
+
+    sample_data = df["Revenue"].sample(
+        100,
+        replace=True
+    )
+
+    sample_means.append(
+        sample_data.mean()
+    )
+
+print("Mean of Sample Means:", np.mean(sample_means))
+print("Standard Deviation:", np.std(sample_means))
+
+plt.figure(figsize=(8, 5))
+plt.hist(sample_means, bins=20)
+plt.title("Sampling Distribution of Revenue")
+plt.xlabel("Sample Mean")
+plt.ylabel("Frequency")
+plt.show()
+
+
+# ============================================================
+# 11. CONFIDENCE INTERVAL
+# ============================================================
+
+print("\n========== CONFIDENCE INTERVAL ==========")
+
+revenue = df["Revenue"]
+
+mean_revenue = revenue.mean()
+std_revenue = revenue.std()
+n = len(revenue)
+
+for confidence in [0.90, 0.95, 0.99]:
+
+    z = stats.norm.ppf(
+        1 - (1 - confidence) / 2
+    )
+
+    margin = z * std_revenue / np.sqrt(n)
+
+    lower = mean_revenue - margin
+    upper = mean_revenue + margin
+
+    print(
+        f"{int(confidence * 100)}% Confidence Interval:"
+    )
+
+    print(
+        "Lower:",
+        lower,
+        "Upper:",
+        upper
+    )
+
+
+# ============================================================
+# 12. BOOTSTRAPPING
+# ============================================================
+
+print("\n========== BOOTSTRAPPING ==========")
+
+bootstrap_medians = []
+
+for i in range(1000):
+
+    sample_data = df["Revenue"].sample(
+        len(df),
+        replace=True
+    )
+
+    bootstrap_medians.append(
+        sample_data.median()
+    )
+
+lower = np.percentile(
+    bootstrap_medians,
+    2.5
+)
+
+upper = np.percentile(
+    bootstrap_medians,
+    97.5
+)
+
+print("Bootstrap Median:", np.median(bootstrap_medians))
+print("95% Bootstrap CI:", lower, upper)
+
+plt.figure(figsize=(8, 5))
+plt.hist(bootstrap_medians, bins=30)
+plt.title("Bootstrap Distribution")
+plt.xlabel("Median Revenue")
+plt.ylabel("Frequency")
+plt.show()
+
+
+# ============================================================
+# 13. HYPOTHESIS TESTING
+# ============================================================
+
+print("\n========== HYPOTHESIS TESTING ==========")
+
+# Test whether average revenue is different from 100
+test_value = 100
+
+t_statistic, p_value = stats.ttest_1samp(
+    df["Revenue"],
+    test_value
+)
+
+print("T-statistic:", t_statistic)
+print("P-value:", p_value)
+
+alpha = 0.05
+
+if p_value < alpha:
+    print("Decision: Reject Null Hypothesis")
+else:
+    print("Decision: Fail to Reject Null Hypothesis")
+
+
+# ============================================================
+# 14. A/B TESTING
+# ============================================================
+
+print("\n========== A/B TESTING ==========")
+
+# Split transactions into two groups
+group_A = df.iloc[:len(df)//2]["Revenue"]
+group_B = df.iloc[len(df)//2:]["Revenue"]
+
+t_stat, p_value = stats.ttest_ind(
+    group_A,
+    group_B,
+    equal_var=False
+)
+
+print("Group A Mean:", group_A.mean())
+print("Group B Mean:", group_B.mean())
+print("T-statistic:", t_stat)
+print("P-value:", p_value)
+
+
+# ============================================================
+# 15. TIME SERIES ANALYSIS
+# ============================================================
+
+print("\n========== TIME SERIES ANALYSIS ==========")
+
+monthly_revenue = (
+    df.set_index("InvoiceDate")
+    .resample("M")["Revenue"]
+    .sum()
+)
+
+print(monthly_revenue)
+
+plt.figure(figsize=(10, 5))
+plt.plot(
+    monthly_revenue.index,
+    monthly_revenue.values
+)
+plt.title("Monthly Revenue Trend")
+plt.xlabel("Month")
+plt.ylabel("Revenue")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+
+# ============================================================
+# 16. EXPONENTIAL SMOOTHING
+# ============================================================
+
+print("\n========== EXPONENTIAL SMOOTHING ==========")
+
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+model_exp = ExponentialSmoothing(
+    monthly_revenue,
+    trend="add",
+    seasonal=None
+)
+
+fit_exp = model_exp.fit()
+
+forecast_exp = fit_exp.forecast(3)
+
+print("Next 3 Months Forecast:")
+print(forecast_exp)
+
+
+# ============================================================
+# 17. FORECAST ACCURACY
+# ============================================================
+
+actual = monthly_revenue.iloc[-3:]
+predicted = fit_exp.fittedvalues.iloc[-3:]
+
+mae = mean_absolute_error(
+    actual,
+    predicted
+)
+
+mse = mean_squared_error(
+    actual,
+    predicted
+)
+
+rmse = np.sqrt(mse)
+
+print("\n========== FORECAST ACCURACY ==========")
+print("MAE:", mae)
+print("MSE:", mse)
+print("RMSE:", rmse)
+
+
+# ============================================================
+# 18. OPTIMIZATION MODELING
+# ============================================================
+
+print("\n========== OPTIMIZATION ==========")
+
+from scipy.optimize import linprog
+
+# Example:
+# Product A profit = 40
+# Product B profit = 30
+
+profit = [-40, -30]
+
+# Resource constraints
+A = [
+    [2, 1],
+    [1, 2]
+]
+
+b = [
+    100,
+    80
+]
+
+result = linprog(
+    profit,
+    A_ub=A,
+    b_ub=b,
+    bounds=[(0, None), (0, None)],
+    method="highs"
+)
+
+print("Optimal Product A:", result.x[0])
+print("Optimal Product B:", result.x[1])
+print("Maximum Profit:", -result.fun)
+
+
+# ============================================================
+# 19. SIMULATION MODELING
+# ============================================================
+
+print("\n========== SIMULATION ==========")
+
+np.random.seed(42)
+
+scenarios = {}
+
+for scenario in ["Low Demand", "Medium Demand", "High Demand"]:
+
+    if scenario == "Low Demand":
+        demand = np.random.normal(100, 15, 1000)
+
+    elif scenario == "Medium Demand":
+        demand = np.random.normal(150, 20, 1000)
+
+    else:
+        demand = np.random.normal(200, 25, 1000)
+
+    demand = np.maximum(demand, 0)
+
+    sales = demand * 20
+
+    scenarios[scenario] = sales.mean()
+
+print("Average Sales by Scenario:")
+
+for scenario, sales in scenarios.items():
+    print(scenario, ":", sales)
+
+
+plt.figure(figsize=(8, 5))
+plt.bar(
+    list(scenarios.keys()),
+    list(scenarios.values())
+)
+
+plt.title("Simulation Scenario Comparison")
+plt.xlabel("Scenario")
+plt.ylabel("Average Sales")
+plt.show()
+
+
+# ============================================================
+# 20. ANOVA
+# ============================================================
+
+print("\n========== ANOVA ==========")
+
+# Divide revenue into three groups
+group1 = df["Revenue"].sample(
+    min(1000, len(df)),
+    random_state=1
+)
+
+group2 = df["Revenue"].sample(
+    min(1000, len(df)),
+    random_state=2
+)
+
+group3 = df["Revenue"].sample(
+    min(1000, len(df)),
+    random_state=3
+)
+
+f_stat, p_value = f_oneway(
+    group1,
+    group2,
+    group3
+)
+
+print("F-statistic:", f_stat)
+print("P-value:", p_value)
+
+if p_value < 0.05:
+    print("Decision: Significant difference exists")
+else:
+    print("Decision: No significant difference")
+
+
+# ============================================================
+# 21. EXPERIMENTAL DESIGN
+# ============================================================
+
+print("\n========== EXPERIMENTAL DESIGN ==========")
+
+print("Factor 1: Promotion Type")
+print("Factor 2: Discount Level")
+print("Response Variable: Revenue")
+print("Experimental Unit: Customer Transaction")
+
+
+# ============================================================
+# 22. FACTORIAL EXPERIMENT
+# ============================================================
+
+print("\n========== FACTORIAL EXPERIMENT ==========")
+
+factorial_data = pd.DataFrame({
+    "Promotion": [
+        "Online", "Online",
+        "Email", "Email"
+    ],
+    "Discount": [
+        "Low", "High",
+        "Low", "High"
+    ],
+    "Revenue": [
+        20000, 28000,
+        22000, 30000
+    ]
+})
+
+print(factorial_data)
+
+print("\nAverage Revenue by Promotion:")
+print(
+    factorial_data.groupby("Promotion")["Revenue"].mean()
+)
+
+print("\nAverage Revenue by Discount:")
+print(
+    factorial_data.groupby("Discount")["Revenue"].mean()
+)
+
+
+# ============================================================
+# 23. BUSINESS INSIGHTS
+# ============================================================
+
+print("\n========== BUSINESS INSIGHTS ==========")
+
+print("1. Revenue varies across products and countries.")
+print("2. Quantity and revenue have a positive relationship.")
+print("3. Some products generate significantly higher revenue.")
+print("4. The United Kingdom represents a major share of transactions.")
+print("5. Revenue distribution contains high-value transactions.")
+print("6. Monthly revenue shows changes over time.")
+print("7. Forecasting can support future sales planning.")
+print("8. Statistical analysis helps compare business groups.")
+print("9. Optimization can improve resource allocation.")
+print("10. Simulation can help evaluate different demand scenarios.")
+
+
+# ============================================================
+# 24. BUSINESS RECOMMENDATIONS
+# ============================================================
+
+print("\n========== BUSINESS RECOMMENDATIONS ==========")
+
+print("1. Focus on high-revenue products.")
+print("2. Monitor high-value customer transactions.")
+print("3. Use forecasting for inventory planning.")
+print("4. Improve marketing in strong-performing markets.")
+print("5. Use customer and transaction data for decision-making.")
+print("6. Use optimization for better resource allocation.")
+print("7. Use simulation to prepare for demand changes.")
+print("8. Regularly monitor sales trends and business KPIs.")
+
+
+# ============================================================
+# END OF PROJECT
+# ============================================================
+
+print("\n========================================")
+print("ONLINE RETAIL BUSINESS ANALYTICS")
+print("PROJECT COMPLETED SUCCESSFULLY")
+print("========================================")
